@@ -1,0 +1,57 @@
+name: Build Static Offline Version
+
+on:
+  push:
+    branches: [ main ]           # 或你想触发的分支
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:             # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest       # Linux runner 构建最快且兼容
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'       # Vite 项目推荐 18+ 或 20 LTS
+        cache: 'yarn'            # 使用 yarn 缓存依赖（仓库有 yarn.lock）
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile   # --frozen-lockfile 确保一致性
+
+    - name: Build static files
+      run: yarn build
+      # 如果你的 package.json 用的是 npm run build，也可以改成 npm run build
+
+    - name: Upload dist as artifact (离线版本)
+      uses: actions/upload-artifact@v4
+      with:
+        name: sapic-offline-dist
+        path: dist/
+        retention-days: 30       # artifact 保留 30 天，可下载 zip
+
+    # 可选：自动发布到 GitHub Releases（方便下载离线包）
+    - name: Release offline version (仅 main push 时)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: offline-build-${{ github.run_number }}
+        name: Offline Static Build ${{ github.run_number }}
+        files: |
+          dist/*
+        body: |
+          自动构建的 sapic 离线静态版本（dist 文件夹）
+          
+          使用方式：
+          1. 下载 Release 中的 dist.zip（或直接解压 dist 文件夹）
+          2. 双击 dist/index.html 即可在浏览器离线打开使用
+          
+          Commit: ${{ github.sha }}
+        draft: false
+        prerelease: true
+        token: ${{ secrets.GITHUB_TOKEN }}
